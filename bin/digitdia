@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+#
+# digidia
+#
+# Interprete USBMON file as DigitDia scanner
+#
+# Usage:
+#   digitdia                      # Reads from stdin
+#   digitdia <usbmon-file1> ...   # Reads from file(s)
+#
+
+$:.push(File.join(File.dirname(__FILE__), '..', 'lib'))
+require 'usbmon'
+
+class DigitDia
+  def initialize path=nil
+    if path
+      raise "Empty path" if path.empty?
+      @path = path
+      @file = File.open(path, 'r')
+      raise "Can't open #{path}" unless path
+    else
+      @file = STDIN
+      STDERR.puts "Reading from stdin"
+    end
+    @digitdia = UsbMon::DigitDia.new
+  end
+  
+  def interprete to=STDOUT
+    events = UsbMon::Event.parse @file
+    @digitdia.run events
+  end
+end
+
+if ARGV.size == 0
+  digitdia = DigitDia.new
+  digitdia.interprete
+else
+  ARGV.each do |path|
+    digitdia = DigitDia.new path
+    digitdia.interprete
+  end
+end
