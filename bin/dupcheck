@@ -14,7 +14,7 @@ class DupCheck
     raise "Empty path" if path.empty?
     @path = path
     File.open(path, 'r') do |file|
-      @events = USBMON::Event.parse file
+      @events = UsbMon::Event.parse file
     end
   end
   

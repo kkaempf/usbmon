@@ -14,7 +14,7 @@
       # S - status     ('s' - setup tag)
       #
 
-module USBMON
+module UsbMon
   
   #
   # Core class - USB Event
