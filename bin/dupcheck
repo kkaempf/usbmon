@@ -1,10 +1,12 @@
+#!/usr/bin/env ruby
 #
 # dupcheck.rb
 #
 # Find duplicate chains of USB events
 #
 #
-require File.join(File.dirname(__FILE__),'usbmon')
+$:.push(File.join(File.dirname(__FILE__), '..', 'lib'))
+require 'usbmon'
 
 class DupCheck
   attr_reader :events
