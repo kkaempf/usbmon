@@ -1,12 +1,13 @@
 # Convert USBMON capture data ('u' format) to ASCII
 #
 
-      # U                T          E P          S
+      # U                T          E A          S
       # ffff88030b7da180 3003266721 S Co:1:002:0 s 40 0c 0087 0008 0001 1 = 04
       # U - urb tag
       # T - timestamp
       # E - event type ('S'ubmission, 'C'allback, 'E'error)
-      # P - pipe word (<URB type and direction>:<Bus number>:<Device address>:<Endpoint number>
+      # A - address word (formerly 'pipe')
+      #                <URB type and direction>:<Bus number>:<Device address>:<Endpoint number>
       #	               Ci Co   Control input and output
       #                Zi Zo   Isochronous input and output
       #		       Ii Io   Interrupt input and output			    
@@ -27,25 +28,12 @@ module UsbMon
     private
     #
     # (private)
-    # parse 'pipe word'
+    # parse 'address word'
     #
-    def pipe word
-      # P - pipe word (<URB type and direction>:<Bus number>:<Device address>:<Endpoint number>)
+    def address word
+      # A - address word (<URB type and direction>:<Bus number>:<Device address>:<Endpoint number>)
       values = word.split(":")
-      case values[0][0,1]
-      when "C" then @type = :control
-      when "Z" then @type = :isochronous
-      when "I" then @type = :interrupt
-      when "B" then @type = :bulk
-      else
-	STDERR.puts "Unknown urb type #{values[0][0,1]}"
-      end
-      case values[0][1,1]
-      when "i" then @dir = :in
-      when "o" then @dir = :out
-      else
-	STDERR.puts "Unknown direction #{values[0][1,1]}"
-      end
+      @utd = values[0]
       @bus = values[1].to_i
       @device = values[2].to_i
       @endpoint = values[3].to_i
@@ -57,20 +45,20 @@ module UsbMon
     # Consumes 5 values
     #
     def initialize values
+      @raw = values.join(" ")
       @urb = values.shift.hex
       @timestamp = values.shift.to_i
       values.shift # values[2] consumed at parse
-      pipe values.shift
+      address values.shift
       @status = values.shift
     end
     public
-    attr_reader :urb, :timestamp, :type, :dir, :bus, :device, :endpoint, :status, :dlen, :dtag, :data
+    attr_reader :raw, :urb, :timestamp, :utd, :bus, :device, :endpoint, :status, :dlen, :dtag, :data
     #
     # Check for payload equality
     #
     def == event
-      self.type == event.type &&
-        self.dir == event.dir &&
+      self.utd == event.utd &&
         self.bus == event.bus &&
         self.device == event.device &&
         self.endpoint == event.endpoint &&
@@ -146,13 +134,13 @@ module UsbMon
     # string representation
     #
     def to_s
-      "%016x %08d %s %s [Bus %d, Device %d, Endpoint %d]" % [@urb, @timestamp, @type, @dir, @bus, @device, @endpoint]
+      "%016x %08d %s [B%dD%dE%d]" % [@urb, @timestamp, @utd, @bus, @device, @endpoint]
     end
     #
     # content to string
     #
     def content
-      "%s %s [Bus %d, Device %d, Endpoint %d]" % [@type, @dir, @bus, @device, @endpoint]
+      "%s [B%dD%dE%d]" % [@utd, @bus, @device, @endpoint]
     end
   end
   
@@ -161,19 +149,16 @@ module UsbMon
   #
   class Submission < Event
     private
-    def request_type val
-      @req_type = val.hex
-    end
     def request_type_s
-      s = case (@req_type >> 5) & 0x03
+      s = case (@bmRequestType >> 5) & 0x03
       when 0 then "Standard"
       when 1 then "Class"
       when 2 then "Vendor"
       when 3 then "Reserved"
       end
       s << " "
-      s << (((@req_type & 128) == 0) ? "->" : "<-")
-      s << case @req_type & 0x1f
+      s << (((@bmRequestType & 128) == 0) ? "->" : "<-")
+      s << case @bmRequestType & 0x1f
       when 0 then "Device"
       when 1 then "Interface"
       when 2 then "Endpoint"
@@ -183,16 +168,16 @@ module UsbMon
       end
     end
     public
-    attr_reader :req_type, :req, :value, :index, :length, :values, :tag
+    attr_reader :bmRequestType, :bRequest, :wValue, :wIndex, :wLength, :dtag, :data
     def initialize values
       super values
       if @status == "s" # setup
-	request_type values.shift
-	@req = values.shift
-	@value = values.shift
-	@index = values.shift.hex
-	@index = -(65536-@index) if @index > 32767
-	@length = values.shift.hex
+	@bmRequestType = values.shift.hex
+	@bRequest = values.shift.hex
+	@wValue = values.shift.hex
+	@wIndex = values.shift.hex
+	@wIndex = -(65536-@wIndex) if @wIndex > 32767
+	@wLength = values.shift.hex
 	self.data = values
       else
 	status = @status.split ":"
@@ -206,7 +191,7 @@ module UsbMon
     def to_s
       s = "#{super} S"
       if @status == "s"
-	s << " {setup: %s r %s val %s idx %d len %d} " % [ request_type_s, @req, @value, @index, @length ]
+	s << " {setup: %s r %x val %s idx %d len %d} " % [ request_type_s, @bRequest, @wValue, @wIndex, @wLength ]
 	s << data_s
       end
       s
