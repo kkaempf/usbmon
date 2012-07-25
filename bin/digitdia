@@ -38,6 +38,7 @@ if ARGV.size == 0
 else
   ARGV.each do |path|
     digitdia = DigitDia.new path
+    puts "-------- #{path} ----------"
     digitdia.interprete
   end
 end

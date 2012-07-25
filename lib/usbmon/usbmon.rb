@@ -191,7 +191,7 @@ module UsbMon
     def to_s
       s = "#{super} S"
       if @status == "s"
-	s << " {setup: %s r %x val %s idx %d len %d} " % [ request_type_s, @bRequest, @wValue, @wIndex, @wLength ]
+	s << " {setup: %s r %x val %04x idx %04x len %d} " % [ request_type_s, @bRequest, @wValue, @wIndex, @wLength ]
 	s << data_s
       end
       s
