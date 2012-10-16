@@ -13,7 +13,7 @@ $:.push(File.join(File.dirname(__FILE__), '..', 'lib'))
 require 'usbmon'
 
 class DigitDia
-  def initialize path=nil
+  def initialize debug_level = 0, path=nil
     if path
       raise "Empty path" if path.empty?
       @path = path
@@ -23,7 +23,7 @@ class DigitDia
       @file = STDIN
       STDERR.puts "Reading from stdin"
     end
-    @digitdia = UsbMon::DigitDia.new
+    @digitdia = UsbMon::DigitDia.new debug_level
   end
   
   def interprete to=STDOUT
@@ -32,12 +32,37 @@ class DigitDia
   end
 end
 
-if ARGV.size == 0
-  digitdia = DigitDia.new
+debug_level = 0
+files = []
+loop do
+  arg = ARGV.shift
+  if arg.nil?
+    break
+  elsif arg == "-d"
+    begin
+      debug_level = ARGV.shift.to_i
+    rescue
+      raise "No integer value following -d"
+    end
+    puts "Debug level #{debug_level}"
+    next
+  elsif File.readable? arg
+    files << arg
+  else
+    STDERR.puts "Warning: Argument '#{arg}' is not a file, ignoring"
+  end
+end
+
+if debug_level <= 0
+  STDERR.puts "*** debug_level too low"
+end
+
+if files.size == 0
+  digitdia = DigitDia.new debug_level
   digitdia.interprete
 else
-  ARGV.each do |path|
-    digitdia = DigitDia.new path
+  files.each do |path|
+    digitdia = DigitDia.new debug_level, path
     puts "-------- #{path} ----------"
     digitdia.interprete
   end
