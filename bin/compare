@@ -1,0 +1,81 @@
+#!/usr/bin/env ruby
+#
+# compare
+#
+# Compare two USBMON files
+#
+# Usage:
+#   compare <usbmon-file1> <usbmon-file2>
+#
+
+$:.push(File.join(File.dirname(__FILE__), '..', 'lib'))
+require 'usbmon'
+
+class Compare
+  def initialize pathL, pathR
+    
+    raise "Empty path1" if pathL.empty?
+    @pathL = pathL
+    @fileL = File.open(pathL, 'r')
+    raise "Can't open #{pathL}" unless @fileL
+    
+    raise "Empty path2" if pathR.empty?
+    @pathR = pathR
+    @fileR = File.open(pathR, 'r')
+    raise "Can't open #{pathR}" unless @fileR
+  end
+  
+  def compare
+    @eventsL = UsbMon::Event.parse @fileL
+    @eventsR = UsbMon::Event.parse @fileR
+    first = @eventsL.first
+    @busL = first.bus
+    @deviceL = first.device
+    first = @eventsR.first
+    @busR = first.bus
+    @deviceR = first.device
+    i = 0
+    loop do
+      eL = @eventsL[i]
+      break if eL.nil?
+      eR = @eventsR[i]
+      break if eR.nil?
+      begin
+	raise "Class L: #{eL.class} R: #{eR.class}" unless eL.class == eR.class
+	raise "Bus L: expect #{@busL}, have #{eL.bus}" unless eL.bus == @busL
+	raise "Bus R: expect #{@busR}, have #{eR.bus}" unless eR.bus == @busR
+	raise "Device L: expect #{@deviceL}, have #{eL.device}" unless eL.device == @deviceL
+	raise "Device R: expect #{@deviceR}, have #{eR.device}" unless eR.device == @deviceR
+	raise "Endpoint L: #{eL.endpoint}, R: #{eR.endpoint}" unless eL.endpoint == eR.endpoint
+	raise "Status L: #{eL.status}, R: #{eR.status}" unless eL.status == eR.status
+        case eL
+	when UsbMon::Submission
+	  raise "bmRequestType L: #{eL.bmRequestType}, R: #{eR.bmRequestType}" unless eL.bmRequestType == eR.bmRequestType
+	  raise "bRequest L: #{eL.bRequest}, R: #{eR.bRequest}" unless eL.bRequest == eR.bRequest
+	  raise "wValue L: #{eL.wValue}, R: #{eR.wValue}" unless eL.wValue == eR.wValue
+#	  raise "wIndex L: #{eL.wIndex}, R: #{eR.wIndex}" unless eL.wIndex == eR.wIndex
+	  raise "wLength L: #{eL.wLength}, R: #{eR.wLength}" unless eL.wLength == eR.wLength
+	  raise "dtag L: #{eL.dtag}, R: #{eR.dtag}" unless eL.dtag == eR.dtag
+	  raise "data L: #{eL.data}, R: #{eR.data}" unless eL.data == eR.data
+	end
+	#      raise " L: #{eL.}, R: #{eR.}" unless eL. == eR.
+	rescue Exception => e
+	  STDERR.puts e
+	  STDERR.puts "\tL: #{eL.raw}"
+	  STDERR.puts "\tR: #{eR.raw}"
+      end
+      i += 1
+    end
+    puts "Done after #{i} events"
+  end
+end
+
+pathL = ARGV.shift
+pathR = ARGV.shift
+
+unless ARGV.empty?
+  raise "Expecting 2 arguments"
+end
+
+compare = Compare.new pathL, pathR
+compare.compare
