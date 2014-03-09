@@ -77,6 +77,7 @@ module UsbMon
     # see "command codes used in the data part of a SCSI write command" at end of backed/pie-scsidef.h
     #    
     def explain_write data, event
+      message :scsi, "\texplain_write #{data.inspect}", event
       cmd = get_value data
       len = get_value data
       if data.size < len # consistency check
@@ -238,7 +239,7 @@ module UsbMon
                 @scsi_extra_count = @scsi_cmd_length.hex.to_i
                 @scsi_extra_data = []
               when "0c" then message :scsi, "0x0c (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
-              when "0f" then message :scsi, "read_reverse (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
+              when "0f" then message :scsi, "get_param (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
               when "12" then message :scsi, "inquiry (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
               when "16" then message :scsi, "reserve_unit (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event # used ?
               when "18" then message :scsi, "copy (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
@@ -344,7 +345,16 @@ module UsbMon
     
     # C Ci
     def interprete_callback_control_input event
-      # status
+      # SCSI status
+      case event.data
+      when "00" then message :cmd, "Ok", event
+      when "01" then message :cmd, "Read", event
+      when "02" then message :scsi, "*** Status 02", event
+      when "03" then message :cmd, "Busy", event
+      when "08" then message :cmd, "Wait", event
+      else
+	raise "Unknown SCSI status #{event.data.inspect}"
+      end
       message :usb, "\t= #{event.status}", event
     end
 
