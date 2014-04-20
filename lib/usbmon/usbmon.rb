@@ -24,9 +24,15 @@ module UsbMon
       @peek = nil
       @lnum = 0
     end
-    def peek
-      @peek = self.next
+    # get next event without consuming it
+    def peek klass = nil, utd = nil
+      begin
+        @peek = self.next klass, utd
+      rescue
+      end
+      @peek
     end
+    # consume next event
     def next klass = nil, utd = nil
       if @peek
         event = @peek
