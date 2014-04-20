@@ -2,7 +2,7 @@ class BulkIn
   attr_reader :length, :data
   def initialize stream, maxlen
     @length = 0
-    @data = []
+    @data = ""
     loop do
       # S:Bi sending buffer size
       event = stream.next UsbMon::Submission, "Bi"
