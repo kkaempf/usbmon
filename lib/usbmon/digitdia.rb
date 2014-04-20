@@ -242,7 +242,7 @@ module UsbMon
               when "0f" then message :scsi, "get_param (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
               when "12" then message :scsi, "inquiry (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
               when "16" then message :scsi, "reserve_unit (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event # used ?
-              when "18" then message :scsi, "copy (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
+              when "18" then message :scsi, "get_ccd_mask (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
               when "1a" then message :scsi, "mode sense (#{@scsi_cmd_length}:#{@scsi_cmd_data.inspect})", event
               when "1b"
                 message :scsi, "scan : #{@scsi_cmd_length}:#{@scsi_cmd_data.inspect}", event
@@ -333,7 +333,7 @@ module UsbMon
       when "Bo"
         interprete_submission_bulk_output event
       when "Zi", "Zo", "Ii", "Io"
-        STDERR.puts "*** Unhandled submission utd #{event.utd}"
+        puts "*** Unhandled submission utd #{event.utd}"
       else
         raise "Unknown event type #{event.type.inspect}"
       end
@@ -390,7 +390,7 @@ module UsbMon
       when "Bo"
         interprete_callback_bulk_output event
       when "Zi", "Zo", "Ii", "Io"
-        STDERR.puts "*** Unhandled callback utd #{event.utd}"
+        puts "*** Unhandled callback utd #{event.utd}"
       else
         raise "Unknown event type #{event.type.inspect}"
       end
@@ -419,8 +419,12 @@ module UsbMon
     #
     #
     def run events
-      events.each do |event|        
-        interprete event
+      events.each do |event|
+	begin
+	  interprete event
+	rescue Exception => e
+	  puts "*** Skipping event: #{e}"
+	end
       end
 #      return
       puts "Statistics:"
