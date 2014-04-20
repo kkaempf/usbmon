@@ -18,17 +18,38 @@
 module UsbMon
   
   class EventIterator
+    attr_reader :lnum
     def initialize input
       @input = input
+      @peek = nil
+      @lnum = 0
     end
-    def next
-      line = nil
-      while (line = @input.gets)
-	line.strip!
-	next if line.empty?
-	next if line[0,1] == '#' # comment
-	yield Event.line_parse(line)
+    def peek
+      @peek = self.next
+    end
+    def next klass = nil, utd = nil
+      if @peek
+        event = @peek
+        @peek = nil
+      else
+        line = nil
+        while (line = @input.gets)
+          @lnum += 1
+          line.strip!
+          next if line.empty?
+          next if line[0,1] == '#' # comment
+          break
+        end
+        raise IOError unless line # EOF
+        event = Event.line_parse line
       end
+      if klass
+        raise "Event #{event.class} does not match #{klass}" unless event.is_a? klass
+        if utd
+          raise "Event #{event.utd} does not match #{utd}" unless event.utd == utd
+        end
+      end
+      event
     end
   end
 
@@ -89,7 +110,7 @@ module UsbMon
     def data= values
       return unless values
 #      puts "data #{values.inspect}"
-      @dlen = values.shift
+      @dlen = values.shift.to_i
       return unless @dlen
       @dtag = values.shift
       if @dtag == "="
@@ -239,4 +260,3 @@ module UsbMon
   end
 
 end # module
-

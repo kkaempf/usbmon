@@ -1,3 +1,7 @@
 require "usbmon/version"
 require "usbmon/usbmon"
 require "usbmon/digitdia"
+require "usbmon/scsi"
+require "usbmon/ieee1284"
+require "usbmon/control"
+require "usbmon/bulk"

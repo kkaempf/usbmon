@@ -33,18 +33,13 @@ loop do
   end
 end
 
-if debug_level <= 0
-  STDERR.puts "*** debug_level too low"
-end
-
-
 files.each do |file|
   begin
     File.open(file, 'r') do |f|
-      events = EventIterator.new(f)
+      events = UsbMon::EventIterator.new(f)
       dd = UsbMon::DigitDia.new(events)
       dd.debug = debug_level
-      dd.parse
+      dd.consume
     end
   rescue IOError => e
     STDERR.puts "Can't open '#{file}': #{e}"
