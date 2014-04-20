@@ -12,26 +12,6 @@
 $:.push(File.join(File.dirname(__FILE__), '..', 'lib'))
 require 'usbmon'
 
-class DigitDia
-  def initialize debug_level = 0, path=nil
-    if path
-      raise "Empty path" if path.empty?
-      @path = path
-      @file = File.open(path, 'r')
-      raise "Can't open #{path}" unless path
-    else
-      @file = STDIN
-      STDERR.puts "Reading from stdin"
-    end
-    @digitdia = UsbMon::DigitDia.new debug_level
-  end
-  
-  def interprete to=STDOUT
-    events = UsbMon::Event.parse @file
-    @digitdia.run events
-  end
-end
-
 debug_level = 0
 files = []
 loop do
@@ -57,13 +37,16 @@ if debug_level <= 0
   STDERR.puts "*** debug_level too low"
 end
 
-if files.size == 0
-  digitdia = DigitDia.new debug_level
-  digitdia.interprete
-else
-  files.each do |path|
-    digitdia = DigitDia.new debug_level, path
-    puts "-------- #{path} ----------"
-    digitdia.interprete
+
+files.each do |file|
+  begin
+    File.open(file, 'r') do |f|
+      events = EventIterator.new(f)
+      dd = UsbMon::DigitDia.new(events)
+      dd.debug = debug_level
+      dd.parse
+    end
+  rescue IOError => e
+    STDERR.puts "Can't open '#{file}': #{e}"
   end
 end

@@ -17,6 +17,21 @@
 
 module UsbMon
   
+  class EventIterator
+    def initialize input
+      @input = input
+    end
+    def next
+      line = nil
+      while (line = @input.gets)
+	line.strip!
+	next if line.empty?
+	next if line[0,1] == '#' # comment
+	yield Event.line_parse(line)
+      end
+    end
+  end
+
   #
   # Core class - USB Event
   #
@@ -98,7 +113,7 @@ module UsbMon
       end
       s
     end
-    private
+    public
     def Event.line_parse line
       values = line.split(" ")
       # <urb> <time> <type> ...
@@ -110,7 +125,6 @@ module UsbMon
 	STDERR.puts "Unknown event type >#{values[2]}"
       end
     end
-    public
     #
     # Parse usbmon line or file, return single (line) or Array (file) of events
     # Create correct Instance

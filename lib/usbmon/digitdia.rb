@@ -9,8 +9,8 @@
 
 module UsbMon
   class DigitDia
-    def initialize debug_level = 0
-      @debug_level = debug_level
+    def initialize eventstream
+      @stream = eventstream
       @state = :idle
       @counts = {}
       @ieee1284_cmd_index = 0
@@ -22,6 +22,10 @@ module UsbMon
       @scsi_extra_data = []
     end
     
+    def debug level
+      @debug_level = level
+    end
+
     #
     # type: :usb (lowest level)
     #       :ctrl (ieee1284)
