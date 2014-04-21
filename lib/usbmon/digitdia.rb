@@ -14,7 +14,7 @@ module UsbMon
     end
     
     def debug= level
-      @debug = level
+      @debug = level if level > 0
     end
 
     #
