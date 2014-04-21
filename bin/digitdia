@@ -39,7 +39,11 @@ files.each do |file|
       events = UsbMon::EventIterator.new(f)
       dd = UsbMon::DigitDia.new(events)
       dd.debug = debug_level
-      dd.consume
+      begin
+        dd.consume
+      rescue IOError => e
+        next
+      end
     end
   rescue IOError => e
     STDERR.puts "Can't open '#{file}': #{e}"

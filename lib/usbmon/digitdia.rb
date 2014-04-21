@@ -26,6 +26,8 @@ module UsbMon
           scsi = Scsi.consume @stream
           break unless scsi
           puts scsi
+        rescue IOError
+          raise
         rescue Exception => e
           puts "Failed at line #{@stream.lnum} with #{e}"
           puts e.backtrace
