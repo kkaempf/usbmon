@@ -36,6 +36,9 @@ class ScsiData
   def int16 idx
     self[idx] + self[idx+1]*0x100
   end
+  def int32 idx
+    self[idx] + self[idx+1]*0x100 + self[idx+2]*0x10000 + self[idx+3]*0x1000000
+  end
   def to_s
     @data.inspect
   end
@@ -99,7 +102,7 @@ class ScsiStatus
 end
 
 class Scsi
-  attr_reader :cmd, :size, :length, :status, :expected
+  attr_reader :cmd, :size, :data, :length, :status, :expected
   def initialize cmd, stream
 #    puts "Scsi.new #{cmd}"
     @cmd = cmd[0]
@@ -135,12 +138,13 @@ class Scsi
     @status = status
   end
   def to_s
-    "#{name} -> #{@status.to_s}"
+    "**** #{name} -> #{@status.to_s}"
   end
   def name
     @name ||= "%02x" % @cmd
   end
-  def Scsi.consume stream
+
+  def Scsi.consume stream, expect_cmd = nil
 #    puts "Scsi.consume"
     # ieee1284 sequence
     Ieee1284.consume stream
@@ -155,6 +159,11 @@ class Scsi
         raise "Non scsi cmd port %04x" % co.port
       end
       cmd << co.value
+    end
+    if expect_cmd
+      unless expect_cmd == cmd[0]
+        raise "Expected cmd %02x, got %02x" % [expect_cmd, cmd[0]]
+      end
     end
 #    puts "Scsi cmd #{cmd}"
     case cmd[0]
@@ -180,7 +189,10 @@ class Scsi_TestReady < Scsi
   def initialize cmd, stream
     super cmd, stream
     @name = "\tTestReady"
-  end    
+  end
+  def to_s
+    "\tReady? -> #{@status}"
+  end
 end
 
 class Scsi_RequestSense < Scsi
@@ -226,36 +238,63 @@ class Scsi_Read < Scsi
     super cmd, stream
   end
   def to_s
-    "Read [#{@size} lines] #{@length} of #{@expected} bytes, #{@length/@size} bytes per line"
+    if @status.value == 0
+      "Read [#{@size} lines] #{@length} of #{@expected} bytes, #{@length/@size} bytes per line"
+    else
+      "Read -> #{@status}"
+    end
   end
 end
 
 class Scsi_Write < Scsi
   def initialize cmd, stream
     super cmd, stream
+    @type = @data[0]
+    if (@data[0] & 0x80) == 0x80
+      read = Scsi.consume stream, 0x08
+      @data = read.data
+      @size = read.size
+      @length = read.length
+      @expected = read.expected
+      @status = read.status
+    end
   end
   def to_s
-    case @data[0]
+    s = ((@type & 0x80) == 0x80) ? "Get" : "Set"
+    s << " "
+    case (@type & 0x7f)
     when 1
-      @name = "SetPowerSave"
+      s << "PowerSave"
     when 0x10
-      @name = "SetGammaTable"
+      s << "GammaTable"
     when 0x11
-      @name = "SetHalftonePattern"
+      s << "HalftonePattern"
     when 0x12
-      "SetScanFrame [#{@data.int16(4)}] (#{@data.int16(6)},#{@data.int16(8)})-(#{@data.int16(10)},#{@data.int16(12)})"
+      s << "ScanFrame [#{@data.int16(4)}] (#{@data.int16(6)},#{@data.int16(8)})-(#{@data.int16(10)},#{@data.int16(12)})"
     when 0x13
-      "SetExposure #{ScsiData.filter_name(@data.int16(4))} to #{@data.int16(6)}%"
+      s << "Exposure #{ScsiData.filter_name(@data.int16(4))} to #{@data.int16(6)}%"
     when 0x14
-      "SetHighlightShadow #{ScsiData.filter_name(@data.int16(4))} to #{@data.int16(6)}%"
+      s << "HighlightShadow #{ScsiData.filter_name(@data.int16(4))} to #{@data.int16(6)}%"
     when 0x15
-      @name = "SetCalibrationInfo"
+      s << "CalibrationInfo"
+      size = @data[5]
+      color = 0
+      while color < @data[4]
+        s << "\n  #{ScsiData.color_name(color)}"
+        s << " type %02x" % @data[8+color*size]
+        s << " send #{@data[9+color*size]}"
+        s << " recv #{@data[10+color*size]}"
+        s << ", #{@data[11+color*size]} lines"
+        s << ", #{@data.int16(12+color*size)} pixels per line"
+        color += 1
+      end
+      s
     when 0x16
-      @name = "SetCalibrationData"
+      s << "CalibrationData"
     when 0x17
-      @name = "SetCmd17 #{@data.int16(4)}"
+      s << "Cmd17 #{@data.int16(4)}"
     else
-      @name = "*** Unknown write %02x" % @data[0]
+      raise "*** Unknown write %02x" % @type
     end    
   end
 end
@@ -263,7 +302,20 @@ end
 class Scsi_GetParameters < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "GetParameters"
+  end
+  def to_s
+    if @status.value == 0
+      s = "GetParameters"
+      s << " width #{@data.int16(0)}"
+      s << ", lines #{@data.int16(2)}"
+      s << ", bytes #{@data.int16(4)}"
+      s << "\n   filter offsets #{@data[6]} #{@data[7]}"
+      s << ", period #{@data.int32(8)}"
+      s << ", rate #{@data.int16(12)}"
+      s << "\n   #{@data.int16(14)} lines available"
+    else
+      "GetParameters -> #{@status}"
+    end
   end
 end
 
@@ -324,15 +376,17 @@ end
 class Scsi_Slide < Scsi
   def initialize cmd, stream
     super cmd, stream
+  end
+  def to_s
     case [@data[0], @data[1], @data[2], @data[3]]
     when [4,1,0,0x7c]
-      @name = "NextSlide"
+      "NextSlide"
     when [5,1,0,0]
-      @name = "PreviousSlide"
+      "PreviousSlide"
     when [0x10,1,0,0]
-      @name = "LampOn"
+      "LampOn"
     when [0x40,0,0,1]
-      @name = "ReloadSlide"
+      "ReloadSlide"
     else
       raise "*** Slide: %s" % @data
     end
