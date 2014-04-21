@@ -53,6 +53,15 @@ class ScsiData
   def ScsiData.color_name idx
     [ "Red", "Green", "Blue", "Infrared"][idx]
   end
+  def ScsiData.color_format format
+    case format
+    when 1 then "Pixel"
+    when 2 then "Line"
+    when 4 then "Index"
+    else
+      "**** Color format #{format}"
+    end
+  end
 end
 
 class ScsiStatus
@@ -90,12 +99,12 @@ class ScsiStatus
 end
 
 class Scsi
-  attr_reader :cmd, :length, :status, :expected
+  attr_reader :cmd, :size, :length, :status, :expected
   def initialize cmd, stream
 #    puts "Scsi.new #{cmd}"
     @cmd = cmd[0]
     @name = nil
-    @length = cmd[3] * 255 + cmd[4]
+    @size = cmd[3] * 255 + cmd[4]
     status = ScsiStatus.new stream
     if status.value == 1
       # read, set length
@@ -111,7 +120,7 @@ class Scsi
       @expected = nil
       case @cmd # check for write
       when 0x0a, 0x15, 0xd1, 0xdc
-        count = length
+        count = @size
         data = ""
         while count > 0 do
           co = ControlOut.new stream
@@ -215,7 +224,9 @@ end
 class Scsi_Read < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "Read"
+  end
+  def to_s
+    "Read [#{@size} lines] #{@length} of #{@expected} bytes, #{@length/@size} bytes per line"
   end
 end
 
@@ -259,21 +270,54 @@ end
 class Scsi_ModeSelect < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "ModeSelect"
+  end
+  def to_s
+    s = "Mode Select -> #{@status}"
+    s << "\n  #{@data.int16(2)} dpi"
+    s << ", #{@data[4]} passes"
+    s << ", #{@data[5]} colors"
+    s << "\n  color format #{ScsiData.color_format(@data[6])}"
+    s << ", byte order #{@data[8]}"
+    s << "\n  quality:"
+    quality = @data[9]
+    if quality & 0x02 == 2
+      s << " sharpen"
+    end
+    if quality & 0x08 == 8
+      s << " skipShadingAnalysis"
+    end
+    if quality & 0x80 == 0x80
+      s << " fastInfrared"
+    end
+    s << "\n  halftone pattern #{@data[12]}"
+    s << ",  line threshold #{@data[13]}"
   end
 end
 
 class Scsi_GetCCD < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "GetCCD"
+  end
+  def to_s
+    if @status.value == 0
+      "GetCCDMask [#{@size} lines] #{@length} of #{@expected} bytes"
+    else
+      "GetCCDMask -> #{@status}"
+    end
   end
 end
 
 class Scsi_Scan < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "Scan"
+  end
+  def to_s
+    case @size
+    when 0 then "StopScan"
+    when 1 then "StartScan"
+    else
+      "Scan *** illegal length #{@length}"
+    end
   end
 end
 
