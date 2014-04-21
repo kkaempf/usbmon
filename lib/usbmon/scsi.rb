@@ -2,14 +2,27 @@ class ScsiData
   def initialize data
     @data = data
   end
-  def [] idx
-    if @data.is_a? String
-      @data = @data.scan(/../)
-    end
+  def get idx
     begin
       @data[idx].hex
     rescue
       raise "#{@data.class}[#{idx}] failed, #{@data.size}"
+    end
+  end
+  def [] idx, len = nil
+    if @data.is_a? String
+      @data = @data.scan(/../)
+    end
+    unless len
+      get idx
+    else
+      res = []
+      while len > 0 do
+        res << get(idx)
+        idx += 1
+        len -= 1
+      end
+      res
     end
   end
   def to_s
@@ -132,7 +145,7 @@ end
 class Scsi_TestReady < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "TestReady"
+    @name = "\tTestReady"
   end    
 end
 
@@ -140,6 +153,37 @@ class Scsi_RequestSense < Scsi
   def initialize cmd, stream
     super cmd, stream
     @name = "RequestSense"
+    @error = @data[0]
+    @segment = @data[1]
+    @key = @data[2]
+    @info = @data[3, 4]
+    @addlen = @data[7]
+    @cmdinfo= @data[8, 4]
+    @code = @data[12]
+    @qualifier = @data[13]                                
+  end
+  def to_s
+    s = "Sense: Err %02x, " % @error
+    key_s = [ "NoSense", "RecoveredError", "NotReady", "MediumError",
+              "HardwareError", "IllegalRequest", "UnitAttention", "DataProtect",
+              "BlankCheck", "VendorSpecific", "CopyAborted", "AbortedCommand",
+              "Equal", "VolumeOverflow", "Miscompare", "Completed"]
+    if @key >= key_s.size
+      raise "#{s}**** Key #{@key} too big"
+    end
+    s += "%02x:%s, " % [@key, key_s[@key]]
+    s += case [@key, @code, @qualifier]
+      when [2, 4, 1] then "Logical unit is in the process of becoming ready"
+      when [6, 0x1a, 0] then "Invalid field in parameter list"
+      when [6, 0x20, 0] then "Invalid command operation code"
+      when [6, 0x82, 0] then "Calibration disable not granted"
+      when [6, 0, 6] then "I/O process terminated"
+      when [6, 0x26, 0x82] then "MODE SELECT value invalid: resolution too high (vs)"
+      when [6, 0x26, 0x83] then "MODE SELECT value invalid: select only one color (vs)"
+      else
+        "Code %02x, Qualifier %02x" % [@code, @qualifier]
+      end
+    s
   end
 end
 
@@ -188,7 +232,18 @@ end
 class Scsi_Slide < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "Slide"
+    case [@data[0], @data[1], @data[2], @data[3]]
+    when [4,1,0,0x7c]
+      @name = "NextSlide"
+    when [5,1,0,0]
+      @name = "PreviousSlide"
+    when [0x10,1,0,0]
+      @name = "LampOn"
+    when [0x40,0,0,1]
+      @name = "ReloadSlide"
+    else
+      raise "*** Slide: %s" % @data
+    end
   end
 end
 
@@ -209,7 +264,7 @@ end
 class Scsi_ReadStatus < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "ReadStatus"
+    @name = "\tReadStatus"
   end
   def to_s
     s = "#{@name} -> #{@status}"
