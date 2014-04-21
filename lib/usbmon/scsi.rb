@@ -172,6 +172,7 @@ class Scsi
     when 0x08 then Scsi_Read.new cmd, stream
     when 0x0a then Scsi_Write.new cmd, stream
     when 0x0f then Scsi_GetParameters.new cmd, stream
+    when 0x12 then Scsi_Inquiry.new cmd, stream
     when 0x15 then Scsi_ModeSelect.new cmd, stream
     when 0x18 then Scsi_GetCCD.new cmd, stream
     when 0x1b then Scsi_Scan.new cmd, stream
@@ -186,18 +187,13 @@ class Scsi
 end
 
 class Scsi_TestReady < Scsi
-  def initialize cmd, stream
-    super cmd, stream
-    @name = "\tTestReady"
-  end
   def to_s
     "\tReady? -> #{@status}"
   end
 end
 
 class Scsi_RequestSense < Scsi
-  def initialize cmd, stream
-    super cmd, stream
+  def to_s
     @name = "RequestSense"
     @error = @data[0]
     @segment = @data[1]
@@ -207,8 +203,6 @@ class Scsi_RequestSense < Scsi
     @cmdinfo= @data[8, 4]
     @code = @data[12]
     @qualifier = @data[13]                                
-  end
-  def to_s
     s = "Sense: Err %02x, " % @error
     key_s = [ "NoSense", "RecoveredError", "NotReady", "MediumError",
               "HardwareError", "IllegalRequest", "UnitAttention", "DataProtect",
@@ -234,14 +228,11 @@ class Scsi_RequestSense < Scsi
 end
 
 class Scsi_Read < Scsi
-  def initialize cmd, stream
-    super cmd, stream
-  end
   def to_s
     if @status.value == 0
       "Read [#{@size} lines] #{@length} of #{@expected} bytes, #{@length/@size} bytes per line"
     else
-      "Read -> #{@status}"
+      "Read [#{@size} lines] -> #{@status}"
     end
   end
 end
@@ -300,9 +291,6 @@ class Scsi_Write < Scsi
 end
 
 class Scsi_GetParameters < Scsi
-  def initialize cmd, stream
-    super cmd, stream
-  end
   def to_s
     if @status.value == 0
       s = "GetParameters"
@@ -319,15 +307,47 @@ class Scsi_GetParameters < Scsi
   end
 end
 
-class Scsi_ModeSelect < Scsi
-  def initialize cmd, stream
-    super cmd, stream
+class Scsi_Inquiry < Scsi
+  def to_s
+    s = "Inquiry -> #{@status}"
+#    s << "\n  device type #{@data[0]}"
+#    s << "\n  length #{@data[4]}"
+#    s << "\n  vendor #{@data[8, 8]}"
+#    s << "\n  product #{@data[16, 16]}"
+#    s << "\n  revision #{@data[32, 4]}"
+#    s << "\n  max res X #{@data.int16(36)} Y #{@data.int16(38)}"
+#    s << "\n  max width #{@data.int16(40)} height #{@data.int16(42)}"
+#    s << "\n  filters %02x" % @data[44]
+#    s << "\n  color depths %02x" % @data[45]
+#    s << "\n  color format %02x" % @data[46]
+#    s << "\n  image format %02x" % @data[48]
+#    s << "\n  scan capability %02x" % @data[49]
+#    s << "\n  optional devices %02x" % @data[50]
+#    s << "\n  enhancements %02x" % @data[51]
+#    s << "\n  gamma bits %02x" % @data[52]
+#    s << "\n  last filter %02x" % @data[53]
+#    s << "\n  preview scan resolution #{@data.int16(53)}"
+#    s << "\n  firmware version #{@data[96,4]}"
+#    s << "\n  halftones #{@data[100]}"
+#    s << "\n  minimum highlight #{@data[101]}"
+#    s << "\n  maximum shadow #{@data[102]}"
+#    s << "\n  calibration equation #{@data[103]}"
+#    s << "\n  exposure max #{@data.int16(104)}, min #{@data.int16(106)}"
+#    s << "\n  (#{@data.int16(108)},#{@data.int16(110)}) - (#{@data.int16(112)}, #{@data.int16(114)})"
+#    s << "\n  model #{@data[116]}"
+#    s << "\n  production #{@data[120, 4]}"
+#    s << "\n  timestamp #{@data[124, 20]}"
+#    s << "\n  signature #{@data[144, 40]}"
+    s
   end
+end
+
+class Scsi_ModeSelect < Scsi
   def to_s
     s = "Mode Select -> #{@status}"
     s << "\n  #{@data.int16(2)} dpi"
-    s << ", #{@data[4]} passes"
-    s << ", #{@data[5]} colors"
+    s << ", passes %02x" % @data[4]
+    s << ", color %02x" % @data[5]
     s << "\n  color format #{ScsiData.color_format(@data[6])}"
     s << ", byte order #{@data[8]}"
     s << "\n  quality:"
@@ -347,9 +367,6 @@ class Scsi_ModeSelect < Scsi
 end
 
 class Scsi_GetCCD < Scsi
-  def initialize cmd, stream
-    super cmd, stream
-  end
   def to_s
     if @status.value == 0
       "GetCCDMask [#{@size} lines] #{@length} of #{@expected} bytes"
@@ -360,9 +377,6 @@ class Scsi_GetCCD < Scsi
 end
 
 class Scsi_Scan < Scsi
-  def initialize cmd, stream
-    super cmd, stream
-  end
   def to_s
     case @size
     when 0 then "StopScan"
@@ -374,9 +388,6 @@ class Scsi_Scan < Scsi
 end
 
 class Scsi_Slide < Scsi
-  def initialize cmd, stream
-    super cmd, stream
-  end
   def to_s
     case [@data[0], @data[1], @data[2], @data[3]]
     when [4,1,0,0x7c]
@@ -394,14 +405,10 @@ class Scsi_Slide < Scsi
 end
 
 class Scsi_ReadGainOffset < Scsi
-  def initialize cmd, stream
-    super cmd, stream
-    @name = "ReadGainOffset"
-  end
   def to_s
     # full scale 58981
     s = "Read Gain Offset -> #{@status}"
-    if @data.size < 60
+    if @data.nil? || @data.size < 60
       return "#{s} [Cut off]"
     end
     off = 54
@@ -419,9 +426,6 @@ class Scsi_ReadGainOffset < Scsi
 end
 
 class Scsi_WriteGainOffset < Scsi
-  def initialize cmd, stream
-    super cmd, stream
-  end
   def to_s
     s = "Write Gain Offset -> #{@status}\n"
     s << "  ExposureTime("
@@ -462,12 +466,8 @@ class Scsi_WriteGainOffset < Scsi
 end
 
 class Scsi_ReadStatus < Scsi
-  def initialize cmd, stream
-    super cmd, stream
-    @name = "\tReadStatus"
-  end
   def to_s
-    s = "#{@name} -> #{@status}"
+    s = "\tReadStatus -> #{@status}"
     if @length == 12
       s += ", WarmingUp" if @data[5] != 0
     end
