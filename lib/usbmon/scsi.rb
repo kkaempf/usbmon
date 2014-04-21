@@ -1,12 +1,20 @@
 class ScsiData
+  attr_reader :data
   def initialize data
     @data = data
+  end
+  def size
+    if @data.is_a? String
+      @data.length / 2
+    else
+      @data.length
+    end
   end
   def get idx
     begin
       @data[idx].hex
     rescue
-      raise "#{@data.class}[#{idx}] failed, #{@data.size}"
+      raise "#{@data.class}[#{idx}] failed, max idx is #{@data.size}"
     end
   end
   def [] idx, len = nil
@@ -41,6 +49,9 @@ class ScsiData
       end
     end
     s
+  end
+  def ScsiData.color_name idx
+    [ "Red", "Green", "Blue", "Infrared"][idx]
   end
 end
 
@@ -221,7 +232,7 @@ class Scsi_Write < Scsi
     when 0x11
       @name = "SetHalftonePattern"
     when 0x12
-      @name = "SetScanFrame"
+      "SetScanFrame [#{@data.int16(4)}] (#{@data.int16(6)},#{@data.int16(8)})-(#{@data.int16(10)},#{@data.int16(12)})"
     when 0x13
       "SetExposure #{ScsiData.filter_name(@data.int16(4))} to #{@data.int16(6)}%"
     when 0x14
@@ -231,7 +242,7 @@ class Scsi_Write < Scsi
     when 0x16
       @name = "SetCalibrationData"
     when 0x17
-      @name = "SetCmd17"
+      @name = "SetCmd17 #{@data.int16(4)}"
     else
       @name = "*** Unknown write %02x" % @data[0]
     end    
@@ -289,12 +300,66 @@ class Scsi_ReadGainOffset < Scsi
     super cmd, stream
     @name = "ReadGainOffset"
   end
+  def to_s
+    # full scale 58981
+    s = "Read Gain Offset -> #{@status}"
+    if @data.size < 60
+      return "#{s} [Cut off]"
+    end
+    off = 54
+    while off < 60
+      if off == 54
+        s += "Saturation ("
+      else
+        s += ", "
+      end
+      s += @data.int16(off).to_s
+      off += 2
+    end
+    s += ")"
+  end
 end
 
 class Scsi_WriteGainOffset < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "WriteGainOffset"
+  end
+  def to_s
+    s = "Write Gain Offset -> #{@status}\n"
+    s << "  ExposureTime("
+    off = 0
+    # 0, 2, 4 exposure time
+    3.times do |i|
+      s << ", " if i > 0
+      s << @data.int16(off).to_s
+      off += 2
+    end
+    s << ") Offset("
+    # 6, 7, 8 offset
+    3.times do |i|
+      s << ", " if i > 0
+      s << @data[off].to_s
+      off += 1
+    end
+    off += 3
+    s << ") Gain("
+    # 12, 13, 14 gain
+    3.times do |i|
+      s << ", " if i > 0
+      s << @data[off].to_s
+      off += 1
+    end
+    # 15 light
+    s << ") Light #{@data[15]}"
+    # 16 extra
+    s << ", Extra #{@data[16]}"
+    # 17 double times
+    s << ", DoubleTimes #{@data[17]}"
+    s << "\n  Infrared["
+    s << "ExposureTime #{@data.int16(18)}"
+    s << ", Offset #{@data[20]}"
+    s << ", Gain #{@data[22]}"
+    s << "]"
   end
 end
 
