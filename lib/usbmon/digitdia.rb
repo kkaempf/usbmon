@@ -14,7 +14,7 @@ module UsbMon
     end
     
     def debug= level
-      @debug_level = level
+      @debug = level
     end
 
     #
@@ -25,7 +25,11 @@ module UsbMon
         begin
           scsi = Scsi.consume @stream
           break unless scsi
-          puts scsi
+          if @debug
+            puts "#{@stream.lnum} : #{scsi}"
+          else
+            puts scsi
+          end
         rescue IOError
           raise
         rescue Exception => e
