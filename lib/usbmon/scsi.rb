@@ -390,7 +390,7 @@ end
 class Scsi_Slide < Scsi
   def to_s
     case [@data[0], @data[1], @data[2], @data[3]]
-    when [4,1,0,0x7c]
+    when [4,1,0,0x7c], [4,1,0,0]
       "NextSlide"
     when [5,1,0,0]
       "PreviousSlide"
