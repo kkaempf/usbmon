@@ -25,8 +25,22 @@ class ScsiData
       res
     end
   end
+  def int16 idx
+    self[idx] + self[idx+1]*0x100
+  end
   def to_s
     @data.inspect
+  end
+  def ScsiData.filter_name filter
+    layer = [ "Neutral", "Red", "Green", "Blue" ]
+    s = ""
+    for i in 0..3
+      if filter & (1 << i) != 0
+        s += ", " unless s.empty?
+        s += layer[i]
+      end
+    end
+    s
   end
 end
 
@@ -197,7 +211,30 @@ end
 class Scsi_Write < Scsi
   def initialize cmd, stream
     super cmd, stream
-    @name = "Write"
+  end
+  def to_s
+    case @data[0]
+    when 1
+      @name = "SetPowerSave"
+    when 0x10
+      @name = "SetGammaTable"
+    when 0x11
+      @name = "SetHalftonePattern"
+    when 0x12
+      @name = "SetScanFrame"
+    when 0x13
+      "SetExposure #{ScsiData.filter_name(@data.int16(4))} to #{@data.int16(6)}%"
+    when 0x14
+      "SetHighlightShadow #{ScsiData.filter_name(@data.int16(4))} to #{@data.int16(6)}%"
+    when 0x15
+      @name = "SetCalibrationInfo"
+    when 0x16
+      @name = "SetCalibrationData"
+    when 0x17
+      @name = "SetCmd17"
+    else
+      @name = "*** Unknown write %02x" % @data[0]
+    end    
   end
 end
 
