@@ -414,7 +414,7 @@ class Scsi_ReadGainOffset < Scsi
     off = 54
     while off < 60
       if off == 54
-        s += "Saturation ("
+        s += "\n  Saturation ("
       else
         s += ", "
       end
