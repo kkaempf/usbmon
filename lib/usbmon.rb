@@ -1,5 +1,6 @@
 require "usbmon/version"
 require "usbmon/usbmon"
+require "usbmon/ftdi"
 require "usbmon/digitdia"
 require "usbmon/scsi"
 require "usbmon/ieee1284"

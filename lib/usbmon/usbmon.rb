@@ -15,6 +15,8 @@
       # S - status     ('s' - setup tag)
       #
 
+      # utd - urb type direction
+      
 module UsbMon
   
   class EventIterator
@@ -27,7 +29,13 @@ module UsbMon
     # get next event without consuming it
     def peek klass = nil, utd = nil
       begin
-        @peek = self.next klass, utd
+        @peek = self.next unless @peek
+        if klass && !@peek.is_a?(klass)
+          return nil
+        end
+        if utd && @peek.utd != utd
+          return nil
+        end
       rescue
       end
       @peek
@@ -39,7 +47,9 @@ module UsbMon
         @peek = nil
       else
         line = nil
-        while (line = @input.gets)
+        loop do
+          break if @input.eof?
+          line = @input.gets
           @lnum += 1
           line.strip!
           next if line.empty?
@@ -50,9 +60,9 @@ module UsbMon
         event = Event.line_parse line
       end
       if klass
-        raise "Event #{event.class} does not match #{klass}" unless event.is_a? klass
+        raise "Event #{event.class} does not match expected #{klass}" unless event.is_a? klass
         if utd
-          raise "Event #{event.utd} does not match #{utd}" unless event.utd == utd
+          raise "Event #{event.utd} does not match expected #{utd}" unless event.utd == utd
         end
       end
       event
@@ -172,16 +182,16 @@ module UsbMon
       out
     end
     #
-    # string representation
-    #
-    def to_s
-      "%016x %08d %s [B%dD%dE%d]" % [@urb, @timestamp, @utd, @bus, @device, @endpoint]
-    end
-    #
     # content to string
     #
     def content
       "%s [B%dD%dE%d]" % [@utd, @bus, @device, @endpoint]
+    end
+    #
+    # string representation
+    #
+    def to_s
+      "%016x %08d %s" % [@urb, @timestamp, content]
     end
   end
   
@@ -222,9 +232,8 @@ module UsbMon
 	self.data = values
       else
 	status = @status.split ":"
-	if status.size > 1
-	  STDERR.puts "Status #{@status}"
-	else
+        self.data = values
+	if status.size == 1
 	  @status = @status.to_i
 	end
       end
@@ -232,7 +241,7 @@ module UsbMon
     def to_s
       s = "#{super} S"
       if @status == "s"
-	s << " {setup: %s r %x val %04x idx %04x len %d} " % [ request_type_s, @bRequest, @wValue, @wIndex, @wLength ]
+	s << " {setup: %s req %02x val %04x idx %04x len %d} " % [ request_type_s, @bRequest, @wValue, @wIndex, @wLength ]
 	s << data_s
       end
       s

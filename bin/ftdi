@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+#
+# ftdi
+#
+# Interprete USBMON file as FTDI usb-serial traffic
+#
+# Usage:
+#   ftdi                      # Reads from stdin
+#   ftdi <usbmon-file1> ...   # Reads from file(s)
+#
+
+$:.push(File.join(File.dirname(__FILE__), '..', 'lib'))
+require 'usbmon'
+
+debug_level = 0
+files = []
+digits = []
+loop do
+  arg = ARGV.shift
+  if arg.nil?
+    break
+  elsif arg == "-d"
+    begin
+      debug_level = ARGV.shift.to_i
+    rescue
+      raise "No integer value following -d"
+    end
+    puts "Debug level #{debug_level}"
+    next
+  elsif File.readable? arg
+    files << arg
+  elsif arg =~ /[[:digit:]]/
+    digits << arg
+  else
+    STDERR.puts "Warning: Argument '#{arg}' is not a file, ignoring"
+  end
+end
+
+files.each do |file|
+  begin
+    File.open(file, 'r') do |f|
+      events = UsbMon::EventIterator.new(f)
+      ftdi = UsbMon::Ftdi.new(events, digits)
+      ftdi.debug = debug_level
+      begin
+        ftdi.consume
+      rescue IOError => e
+        next
+      end
+    end
+  rescue IOError => e
+    STDERR.puts "Can't open '#{file}': #{e}"
+  end
+end
