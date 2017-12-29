@@ -6,10 +6,12 @@ class BulkIn
     # assemble multiple Bi up to maxlen
     loop do
       # S:Bi sending buffer size
-      event = stream.next UsbMon::Submission, "Bi"
+      event = stream.get UsbMon::Submission, "Bi"
       bufsize = event.dlen
+#      puts "BulkIn.new submission #{event}"
       # C:Bi receiving data
-      result = stream.next UsbMon::Callback, "Bi"
+      result = stream.get UsbMon::Callback, "Bi"
+#      puts "BulkIn.new callback #{result}"
       @length += result.dlen
       @data << result.data
       if @length > maxlen
@@ -17,8 +19,7 @@ class BulkIn
       elsif @length == maxlen
         break
       end
-      peek = stream.peek(UsbMon::Submission, "Bi")
-      break unless peek
+      break
     end
   end
   def to_s
@@ -34,13 +35,13 @@ class BulkOut
     # assemble multiple Bo up to maxlen
     loop do
       # S:Bo sending data
-      event = stream.next UsbMon::Submission, "Bo"
+      event = stream.get UsbMon::Submission, "Bo"
 #      puts "BulkOut S #{event.dlen}:#{event.data}"
 #      puts "BulkOut S #{event.inspect}"
       @length = event.dlen
       @data = event.data
       # C:Bo receiving size
-      result = stream.next UsbMon::Callback, "Bo"
+      result = stream.get UsbMon::Callback, "Bo"
 #      puts "BulkOut C #{result.inspect}"
       if @length != result.dlen
         raise "BulkOut sent #{@length}, acknowledged #{result.dlen}"
@@ -50,8 +51,7 @@ class BulkOut
       elsif @length == maxlen
         break
       end
-      peek = stream.peek(UsbMon::Submission, "Bo")
-      break unless peek
+      break
     end
   end
   def to_s

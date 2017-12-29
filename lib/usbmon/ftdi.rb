@@ -55,18 +55,27 @@ module UsbMon
         # assuming a FT232RL chip here
         #
         div_value = event.wValue + (event.wIndex<<16)
-        base = 48000000
+        printf "div_value orig %08x\n", div_value;
+        base = 48000000 / 2
         # Deal with special cases for highest baud rates.
         if div_value == 1
           div_value = 0x4001
         elsif div_value == 0
           div_value = 1
         end
+        printf "div_value normalized %08x\n", div_value;
+        # now reverse this (from ftdi_sio.c):
+        #   int divisor3 = base / 2 / baud;
+        #   divisor = divisor3 >> 3;
+        #   divisor |= (__u32)divfrac[divisor3 & 0x7] << 14;               
         divfrac = { 0=>0, 3=>1, 2=>2, 4=>3, 1=>4, 5=>5, 6=>6, 7=>7 }
         idx = (div_value >> 14) & 0x07
-        divisor3 = divfrac[idx]
-        divisor = divisor3 << 3;
-        baud = base / 2 / divisor
+#        printf "idx %02x[%04x], divfrag = %d\n", idx, div_value & ~0x03ff, divfrac[idx];
+        div_value = (div_value & 0x03fff)
+#        printf "div_value no frac %04x\n", div_value;
+        divisor = (div_value << 3) + divfrac[idx];
+#        printf "divisor\n", divisor;
+        baud = base / divisor
         printf "set baudrate 0x%04x[0x%04x] %d\n", event.wValue, event.wIndex, baud
       when 4
         break_v = (event.wValue >> 14) & 0x01
@@ -128,8 +137,6 @@ module UsbMon
       else
         printf "submission type 0x%02x\n", event.bmRequestType
       end
-      callback = @stream.next
-      raise "expected callback, got #{callback}" unless callback.is_a? Callback
     end
   end
   #
@@ -176,14 +183,16 @@ module UsbMon
     # consume event stream
     #
     def consume
+      @stream.bus = @bus
+      @stream.device = @device
       loop do
         begin
-          msg = @stream.peek
-          next unless msg.bus == @bus && msg.device == @device
-#          puts "#{msg.bus}:#{msg.device}[#{msg.utd.inspect}]: #{msg}"
+          msg = @stream.get
+#          puts "Ftdi.consume: #{msg.bus}:#{msg.device}[#{msg.utd.inspect}]: #{msg}"
           #
           # Enpoint 0: control, 1: Rx, 2: Tx
           #
+          @stream.unget msg
           case msg.endpoint
           when 0
             FtdiControl.new @stream, msg.utd
@@ -192,7 +201,7 @@ module UsbMon
           when 2
             FtdiTx.new @stream
           else
-            puts "Endpoint #{msg.endpoint}: #{@stream.next}"
+            puts "Unknown endpoint #{msg.endpoint} for #{msg}"
           end
         rescue IOError
           raise

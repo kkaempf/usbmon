@@ -25,27 +25,70 @@ module UsbMon
       @input = input
       @peek = nil
       @lnum = 0
+      # separate the stream into Ci,Co,Bi, and Bo queues
+      @ci_queue = Array.new
+      @co_queue = Array.new
+      @bi_queue = Array.new
+      @bo_queue = Array.new
     end
-    # get next event without consuming it
-    def peek klass = nil, utd = nil
-      begin
-        @peek = self.next unless @peek
-        if klass && !@peek.is_a?(klass)
-          return nil
-        end
-        if utd && @peek.utd != utd
-          return nil
-        end
-      rescue
+    def bus= b
+      @bus = b
+    end
+    def device= d
+      @device = d
+    end
+    # push event back to queue
+    def unget event
+#      puts "unget(#{event}) ci #{@ci_queue.size}  co #{@co_queue.size}  bi #{@bi_queue.size}  bo #{@bo_queue.size}"
+      raise if event.nil?
+      case event.utd
+      when "Ci"
+        @ci_queue.unshift event
+      when "Co"
+        @co_queue.unshift event
+      when "Bi"
+        @bi_queue.unshift event
+      when "Bo"
+        @bo_queue.unshift event
+      else
+        raise "don't know where to unget #{event.utd}"
       end
-      @peek
     end
     # consume next event
-    def next klass = nil, utd = nil
-      if @peek
-        event = @peek
-        @peek = nil
+    def get klass = UsbMon::Submission, utd = nil
+#      puts "get(#{klass}:#{utd}) ci #{@ci_queue.size}  co #{@co_queue.size}  bi #{@bi_queue.size}  bo #{@bo_queue.size}"
+      case utd
+      when "Ci"
+        event = @ci_queue.shift
+      when "Co"
+        event = @co_queue.shift
+      when "Bi"
+        event = @bi_queue.shift
+      when "Bo"
+        event = @bo_queue.shift
+      when NilClass
+        # looking for any submission
+        [@ci_queue, @co_queue, @bi_queue, @bo_queue].each do |queue|
+#          puts "Looking at queue #{queue.size}: #{queue}"
+          event = queue.shift
+          next unless event
+#          puts "Looking at queue #{queue.size}: #{event}"
+          if event.is_a?(UsbMon::Submission)
+            break
+          end
+          queue.unshift event
+          event = nil
+        end
+#        puts "Using #{event} from queue" if event
       else
+        raise "can't get(#{klass}:#{utd})"
+      end
+      if event && utd
+        raise "Event #{event.utd} does not match expected #{utd}" unless event.utd == utd
+        return event
+      end
+      # nothing matched, get next from input stream
+      loop do
         line = nil
         loop do
           break if @input.eof?
@@ -57,14 +100,30 @@ module UsbMon
           break
         end
         raise IOError unless line # EOF
-        event = Event.line_parse line
+        event = Event.line_parse @lnum, line
+        break if event.bus == @bus && event.device == @device
+        # discard event, doesn't match bus/device
       end
-      if klass
-        raise "Event #{event.class} does not match expected #{klass}" unless event.is_a? klass
-        if utd
-          raise "Event #{event.utd} does not match expected #{utd}" unless event.utd == utd
+#      puts "get(#{klass}:#{utd}) parsed #{event}"
+      if !event.is_a?(klass) || (utd && event.utd != utd)
+        #          puts "get(#{klass}:#{utd}) pushing back #{event}"
+        # wrong class/utd
+        case event.utd
+        when "Ci"
+          @ci_queue.push event
+        when "Co"
+          @co_queue.push event
+        when "Bi"
+          @bi_queue.push event
+        when "Bo"
+          @bo_queue.push event
+        else
+          raise "Don't know where to push #{event.class}:#{event.utd}"
         end
+        #          puts "get recurse"
+        return self.get klass, utd # recurse
       end
+#      puts "get(#{klass}:#{utd}) => #{event}"
       event
     end
   end
@@ -96,7 +155,8 @@ module UsbMon
     #
     # Consumes 5 values
     #
-    def initialize values
+    def initialize lnum, values
+      @lnum = lnum
       @raw = values.join(" ")
       @urb = values.shift.hex
       @timestamp = values.shift.to_i
@@ -105,7 +165,7 @@ module UsbMon
       @status = values.shift
     end
     public
-    attr_reader :raw, :urb, :timestamp, :utd, :bus, :device, :endpoint, :status, :dlen, :dtag, :data
+    attr_reader :raw, :lnum, :urb, :timestamp, :utd, :bus, :device, :endpoint, :status, :dlen, :dtag, :data
     #
     # Check for payload equality
     #
@@ -151,35 +211,16 @@ module UsbMon
       s
     end
     public
-    def Event.line_parse line
+    def Event.line_parse lnum, line
       values = line.split(" ")
       # <urb> <time> <type> ...
       case values[2]
-      when 'S' then return Submission.new values
-      when 'C' then return Callback.new values
-      when 'E' then return Error.new values
+      when 'S' then return Submission.new lnum, values
+      when 'C' then return Callback.new lnum, values
+      when 'E' then return Error.new lnum, values
       else
-	STDERR.puts "Unknown event type >#{values[2]}"
+	STDERR.puts "Unknown event type #{values[2]}"
       end
-    end
-    #
-    # Parse usbmon line or file, return single (line) or Array (file) of events
-    # Create correct Instance
-    #
-    def Event.parse input
-      case input
-      when IO
-        out = []
-        while (line = input.gets)
-          line.strip!
-          next if line.empty?
-          next if line[0,1] == '#' # comment
-          out << line_parse(line)
-        end
-      else
-        out = line_parse input
-      end
-      out
     end
     #
     # content to string
@@ -220,8 +261,8 @@ module UsbMon
     end
     public
     attr_reader :bmRequestType, :bRequest, :wValue, :wIndex, :wLength, :dtag, :data
-    def initialize values
-      super values
+    def initialize lnum, values
+      super lnum, values
       if @status == "s" # setup
 	@bmRequestType = values.shift.hex
 	@bRequest = values.shift.hex
@@ -252,8 +293,8 @@ module UsbMon
   # Callback event
   #
   class Callback < Event
-    def initialize values
-      super values
+    def initialize lnum, values
+      super lnum, values
       self.data = values
     end
     def to_s
@@ -266,8 +307,8 @@ module UsbMon
   # Error event
   #
   class Error < Event
-    def initialize values
-      super values
+    def initialize lnum, values
+      super lnum, values
     end
     def to_s
       s = "#{super} E"

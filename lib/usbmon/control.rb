@@ -1,17 +1,18 @@
 class ControlIn
   attr_reader :port, :length, :data, :event
   def initialize stream
-    ci = stream.next UsbMon::Submission, "Ci"
+    ci = stream.get UsbMon::Submission, "Ci"
     @event = ci
     @port = ci.wValue
     # there might be a corresponding callback
-    result = stream.peek
-    if result.is_a?(UsbMon::Callback) && (event.utd == "Ci")
-      stream.next # consume the peek
-      raise "Mismatch length S:Ci/C:Ci" unless ci.dlen == result.dlen
-      @length = result.dlen
-      @data = result.data
+    result = stream.get UsbMon::Callback, "Ci"
+    if ci.dlen < result.dlen
+      puts "Submission #{ci}"
+      puts "Callback #{result}"
+      raise "Ci callback of #{result.dlen} exceeds buffer of #{ci.dlen}"
     end
+    @length = result.dlen
+    @data = result.data
   end
   def to_s
     "Ci port #{@port}, length #{@length}, data #{@data.inspect}"
@@ -35,9 +36,9 @@ end
 class ControlOut
   attr_reader :port, :length, :data, :event
   def initialize stream
-    co = stream.next UsbMon::Submission, "Co"
+    co = stream.get UsbMon::Submission, "Co"
     @event = co
-    result = stream.next UsbMon::Callback, co.utd
+    result = stream.get UsbMon::Callback, co.utd
     raise "Mismatch Co dlen" if co.dlen != result.dlen
     @port = co.wValue
     @length = co.dlen
