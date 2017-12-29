@@ -57,7 +57,7 @@ module UsbMon
         #
         div_value = event.wValue + (event.wIndex<<16)
 #        printf "div_value orig %08x\n", div_value;
-        base = 48000000 / 2
+        base = 48000000
         # Deal with special cases for highest baud rates.
         if div_value == 1
           div_value = 0x4001
@@ -80,7 +80,7 @@ module UsbMon
         printf "set baudrate 0x%04x[0x%04x] %d\n", event.wValue, event.wIndex, baud
       when 4
         break_v = (event.wValue >> 14) & 0x01
-        stop_bits = ["0","1.5","2","?"][(event.wValue >> 11) & 0x03]
+        stop_bits = ["1","1.5","2","?"][(event.wValue >> 11) & 0x03]
         parity = ["N","O","E","M","S","<5>","<6>","<7>"][(event.wValue >> 8) & 0x07]
         bits = event.wValue & 0x0f
         printf "set data 0x%04x[0x%04x] #{bits}#{parity}#{stop_bits}, brk #{break_v}\n", event.wValue, event.wIndex
