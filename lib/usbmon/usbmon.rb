@@ -56,7 +56,7 @@ module UsbMon
     end
     # consume next event
     def get klass = UsbMon::Submission, utd = nil
-#      puts "get(#{klass}:#{utd}) ci #{@ci_queue.size}  co #{@co_queue.size}  bi #{@bi_queue.size}  bo #{@bo_queue.size}"
+#      puts "get@#{@lnum}(#{klass}:#{utd.inspect}) ci #{@ci_queue.size}  co #{@co_queue.size}  bi #{@bi_queue.size}  bo #{@bo_queue.size}"
       case utd
       when "Ci"
         event = @ci_queue.shift
@@ -72,7 +72,7 @@ module UsbMon
 #          puts "Looking at queue #{queue.size}: #{queue}"
           event = queue.shift
           next unless event
-#          puts "Looking at queue #{queue.size}: #{event}"
+#          puts "Looking at queue #{queue.size}: @#{event.lnum} #{event}"
           if event.is_a?(UsbMon::Submission)
             break
           end
@@ -83,8 +83,8 @@ module UsbMon
       else
         raise "can't get(#{klass}:#{utd})"
       end
-      if event && utd
-        raise "Event #{event.utd} does not match expected #{utd}" unless event.utd == utd
+      if event
+        raise "Event #{event.utd} does not match expected #{utd}" if utd &&  event.utd != utd
         return event
       end
       # nothing matched, get next from input stream

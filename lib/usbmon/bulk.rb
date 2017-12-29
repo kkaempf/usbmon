@@ -1,19 +1,19 @@
 class BulkIn
-  attr_reader :length, :data
+  attr_reader :length, :data, :event, :result
   def initialize stream, maxlen=512
     @length = 0
     @data = ""
     # assemble multiple Bi up to maxlen
     loop do
       # S:Bi sending buffer size
-      event = stream.get UsbMon::Submission, "Bi"
-      bufsize = event.dlen
+      @event = stream.get UsbMon::Submission, "Bi"
+      bufsize = @event.dlen
 #      puts "BulkIn.new submission #{event}"
       # C:Bi receiving data
-      result = stream.get UsbMon::Callback, "Bi"
+      @result = stream.get UsbMon::Callback, "Bi"
 #      puts "BulkIn.new callback #{result}"
-      @length += result.dlen
-      @data << result.data
+      @length += @result.dlen
+      @data << @result.data
       if @length > maxlen
         raise "BulkIn length #{@length} exceeds maximum #{maxlen}"
       elsif @length == maxlen
@@ -28,23 +28,23 @@ class BulkIn
 end
 
 class BulkOut
-  attr_reader :length, :data
+  attr_reader :length, :data, :event, :result
   def initialize stream, maxlen = 512
     @length = 0
     @data = ""
     # assemble multiple Bo up to maxlen
     loop do
       # S:Bo sending data
-      event = stream.get UsbMon::Submission, "Bo"
+      @event = stream.get UsbMon::Submission, "Bo"
 #      puts "BulkOut S #{event.dlen}:#{event.data}"
 #      puts "BulkOut S #{event.inspect}"
-      @length = event.dlen
-      @data = event.data
+      @length = @event.dlen
+      @data = @event.data
       # C:Bo receiving size
-      result = stream.get UsbMon::Callback, "Bo"
+      @result = stream.get UsbMon::Callback, "Bo"
 #      puts "BulkOut C #{result.inspect}"
-      if @length != result.dlen
-        raise "BulkOut sent #{@length}, acknowledged #{result.dlen}"
+      if @length != @result.dlen
+        raise "BulkOut sent #{@length}, acknowledged #{@result.dlen}"
       end
       if @length > maxlen
         raise "BulkIn length #{@length} exceeds maximum #{maxlen}"

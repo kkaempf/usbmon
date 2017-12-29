@@ -14,6 +14,7 @@ module UsbMon
   #
   class FtdiControl
     def initialize stream, utd
+#      puts "FtdiControl"
       @stream = stream
       case utd
       when "Ci"
@@ -36,7 +37,7 @@ module UsbMon
       when 0
         case event.wValue
         when 0
-          puts "reset"
+          printf "reset T%dmsec", event.timestamp/1000
         when 1
           puts "flush rx"
         when 2
@@ -47,7 +48,7 @@ module UsbMon
       when 1
         dtr = (event.wValue >> 8) & 0x01
         rts = (event.wValue >> 8) & 0x02
-        printf "set control 0x%04x[0x%04x]: %s %s\n", event.wValue, event.wIndex, flag("DTR", dtr), flag("RTS", rts)
+        printf "set control T%dmsec 0x%04x[0x%04x]: %s %s\n", event.timestamp/1000, event.wValue, event.wIndex, flag("DTR", dtr), flag("RTS", rts)
       when 2
         puts "flow control"
       when 3
@@ -55,7 +56,7 @@ module UsbMon
         # assuming a FT232RL chip here
         #
         div_value = event.wValue + (event.wIndex<<16)
-        printf "div_value orig %08x\n", div_value;
+#        printf "div_value orig %08x\n", div_value;
         base = 48000000 / 2
         # Deal with special cases for highest baud rates.
         if div_value == 1
@@ -63,7 +64,7 @@ module UsbMon
         elsif div_value == 0
           div_value = 1
         end
-        printf "div_value normalized %08x\n", div_value;
+#        printf "div_value normalized %08x\n", div_value;
         # now reverse this (from ftdi_sio.c):
         #   int divisor3 = base / 2 / baud;
         #   divisor = divisor3 >> 3;
@@ -144,10 +145,19 @@ module UsbMon
   #
   class FtdiRx
     def initialize stream
+#      puts "FtdiRx"
       @stream = stream
       @event = BulkIn.new @stream
-      data = [@event.data].pack('H*').split('').map { |c| DECODE[c.ord] }
-      puts "FtdiRx #{data.map{|d| d.chr.unpack('H*')}.join(' ')}"
+      unless @event.data == "3160" # filter out ftdi heartbeat
+        data = @event.data
+        if data[0,4] == "3160"
+#          puts "heartbeat #{@event.data.inspect}"
+          data = data[4..-1]  # filter out ftdi heartbeat
+#          puts "filtered #{data.inspect}"
+        end
+        data = [data].pack('H*').split('').map { |c| DECODE[c.ord] }
+        puts "FtdiRx #{data.map{|c| ((c & 0x7f)>=32) ? c.chr : '.'}.join('')}: #{data.map{|d| d.chr.unpack('H*')}.join(' ')}"
+      end
     end
   end
   #
@@ -157,8 +167,9 @@ module UsbMon
     def initialize stream
       @stream = stream
       @event = BulkOut.new @stream
+#      puts "FtdiTx #{@event.inspect}"
       data = [@event.data].pack('H*').split('').map { |c| DECODE[c.ord] }
-      puts "FtdiTx #{data.map{|d| d.chr.unpack('H*')}.join(' ')}"
+      puts "FtdiTx T#{@event.event.timestamp/1000}msec #{data.map{|c| ((c & 0x7f)>=32) ? c.chr : '.'}.join('')}: #{data.map{|d| d.chr.unpack('H*')}.join(' ')}"
     end
   end
   class Ftdi
@@ -188,7 +199,7 @@ module UsbMon
       loop do
         begin
           msg = @stream.get
-#          puts "Ftdi.consume: #{msg.bus}:#{msg.device}[#{msg.utd.inspect}]: #{msg}"
+#          puts "Ftdi.consume #{msg.lnum}: #{msg.bus}:#{msg.device}:#{msg.endpoint}[#{msg.utd.inspect}]: #{msg}"
           #
           # Enpoint 0: control, 1: Rx, 2: Tx
           #
