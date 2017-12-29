@@ -101,7 +101,7 @@ module UsbMon
         end
         raise IOError unless line # EOF
         event = Event.line_parse @lnum, line
-        break if event.bus == @bus && event.device == @device
+        break if (@bus.nil? || event.bus == @bus) && (@device.nil? || event.device == @device)
         # discard event, doesn't match bus/device
       end
 #      puts "get(#{klass}:#{utd}) parsed #{event}"
