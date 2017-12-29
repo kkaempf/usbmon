@@ -28,8 +28,8 @@ module UsbMon
       end
 #      puts "FtdiControl #{@event}"
     end
-    def flag s, v
-      s + ((v == 0) ? " LOW" : " HIGH")
+    def flag what, on_off, use
+      what + (use ? (on_off ? " HIGH" : " LOW") : "ignore")
     end
     def submission_vendor_to_device msg
       event = msg.event
@@ -37,7 +37,7 @@ module UsbMon
       when 0
         case event.wValue
         when 0
-          printf "reset T%dmsec", event.timestamp/1000
+          printf "reset T%dmsec\n", event.timestamp/1000
         when 1
           puts "flush rx"
         when 2
@@ -46,18 +46,20 @@ module UsbMon
           printf "reset %02x\n", event.wValue
         end
       when 1
-        dtr = (event.wValue >> 8) & 0x01
-        rts = (event.wValue >> 8) & 0x02
-        printf "set control T%dmsec 0x%04x[0x%04x]: %s %s\n", event.timestamp/1000, event.wValue, event.wIndex, flag("DTR", dtr), flag("RTS", rts)
+        dtr = (event.wValue & 0x01) == 1
+        rts = (event.wValue & 0x02) == 2
+        use_dtr = ((event.wValue >> 8) & 0x01) == 0x01
+        use_rts = ((event.wValue >> 8) & 0x02) == 0x02
+        printf "set control T%dmsec 0x%04x[0x%04x]: %s %s\n", event.timestamp/1000, event.wValue, event.wIndex, flag("DTR", dtr, use_dtr), flag("RTS", rts, use_rts)
       when 2
-        puts "flow control"
+        printf "flow control T%dmsec val 0x%04x  idx 0x%04x\n", event.timestamp/1000, event.wValue, event.wIndex
       when 3
         # see linux ftdi_sio.c:ftdi_232bm_baud_to_divisor()
         # assuming a FT232RL chip here
         #
         div_value = event.wValue + (event.wIndex<<16)
 #        printf "div_value orig %08x\n", div_value;
-        base = 48000000
+        base = 48000000 / 2
         # Deal with special cases for highest baud rates.
         if div_value == 1
           div_value = 0x4001
