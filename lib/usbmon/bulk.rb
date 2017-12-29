@@ -1,6 +1,6 @@
 class BulkIn
   attr_reader :length, :data, :event, :result
-  def initialize stream, maxlen=512
+  def initialize stream, maxlen=1024
     @length = 0
     @data = ""
     # assemble multiple Bi up to maxlen
@@ -11,9 +11,9 @@ class BulkIn
 #      puts "BulkIn.new submission #{event}"
       # C:Bi receiving data
       @result = stream.get UsbMon::Callback, "Bi"
-#      puts "BulkIn.new callback #{result}"
+#      puts "BulkIn.new callback #{@result.dlen}:#{@result.data.inspect}"
       @length += @result.dlen
-      @data << @result.data
+      @data << @result.data if @result.data
       if @length > maxlen
         raise "BulkIn length #{@length} exceeds maximum #{maxlen}"
       elsif @length == maxlen
@@ -29,7 +29,7 @@ end
 
 class BulkOut
   attr_reader :length, :data, :event, :result
-  def initialize stream, maxlen = 512
+  def initialize stream, maxlen = 1024
     @length = 0
     @data = ""
     # assemble multiple Bo up to maxlen
